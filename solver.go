@@ -6,9 +6,14 @@ import (
 	"errors"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
+// Contains the full grid, with secured numbers
 var grid [9][9]int
+
+// Contains a grid of options for each empty cell.
+// If a cell is not empty, slice of option is empty.
 var gridOptions [9][9][]int
 
 // printGrid will display to the standard output a nice ASCII
@@ -31,6 +36,24 @@ func printGrid(withHints bool) {
 		}
 		fmt.Println("|")
 		fmt.Println("+---+---+---+---+---+---+---+---+---+")
+	}
+}
+
+func printGridOptions() {
+	fmt.Println("+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+")
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			fmt.Print("| ")
+			if (grid[row][col] != 0) {
+				fmt.Printf("\033[31m%-13d\033[0m", grid[row][col])
+			} else {
+				var strOptions = strings.Trim(strings.Join(strings.Fields(fmt.Sprint(gridOptions[row][col])), " "), "[]")
+				fmt.Printf("%-13s", strOptions)
+			}
+			fmt.Print(" ")
+		}
+		fmt.Println("|")
+		fmt.Println("+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+")
 	}
 }
 
@@ -112,10 +135,10 @@ func isInCol(col int, val int) bool {
 // |   |   |   |   |   |   |   |   |   |
 // +---+---+---+---+---+---+---+---+---+
 func getSquareFromRowCol(row int, col int) int {
-	var rowIndex int = (row / 3) * 3
-	var colIndex int = (col / 3)
+	var rowOffset int = (row / 3) * 3
+	var colOffset int = (col / 3)
 
-	return (colIndex + 1) + rowIndex
+	return (colOffset + 1) + rowOffset
 }
 
 // isInSquare return true is the given value is already present
@@ -125,11 +148,11 @@ func isInSquare(square int, val int) bool {
 	var cols [3]int
 	var rows [3]int
 
-	var rowIndex int = ((square - 1) / 3) * 3
-	rows = [3]int{0 + rowIndex, 1 + rowIndex, 2 + rowIndex}
+	var rowOffset int = ((square - 1) / 3) * 3
+	rows = [3]int{0 + rowOffset, 1 + rowOffset, 2 + rowOffset}
 
-	var colIndex int = ((square - 1) % 3) * 3
-	cols = [3]int{0 + colIndex, 1 + colIndex, 2 + colIndex}
+	var colOffset int = ((square - 1) % 3) * 3
+	cols = [3]int{0 + colOffset, 1 + colOffset, 2 + colOffset}
 
 	for _, row := range rows {
 		for _, col := range cols {
@@ -207,7 +230,7 @@ func fillSecuredOptions() {
 
 // This algorithm will try to fill all empty cells by checking
 // rows, cols and squares.
-func solveByRowColSquare() {
+func solveByRowColSquare() int {
 	var remains int = countEmptyCells()
 	
 	for (remains > 0) {
@@ -222,10 +245,54 @@ func solveByRowColSquare() {
 		remains = countEmptyCells()
 	}
 	printGrid(true)
-	
-	if (remains != 0) {
-		log.Fatal(errors.New("Could not solve."))		
+
+	return remains
+}
+
+// solveByExclusiveOption will fill grid with options that can't be elsewhere
+// on the square, the row or the column. The given cell can have multiple options
+// but only one cell of the squar/row/column can ultimately host it; e.g. the other
+// cells does not have this possible option.
+func solveByExclusiveOption() {
+	// Browse all squares
+	for square := 1; square <= 9; square++ {
+		var rowOffset int = ((square - 1) / 3) * 3
+		var colOffset int = ((square - 1) % 3) * 3
+		var dict = make(map[int]int)
+
+		for row := (0 + rowOffset); row <= (2 + rowOffset); row++ {
+			for col := (0 + colOffset); col <= (2 + colOffset); col++ {
+				for _, option := range gridOptions[row][col] {
+					dict[option] = dict[option]+1
+				}
+			}
+		}
+
+		// If an option has only one possibility in the square, set it as the only option.
+		var valueToFix int
+		for option, amount := range dict {
+			if (amount == 1) {
+				fmt.Printf("In square %d, value %d can only be in one place\n", square, option)
+				valueToFix = option
+			}
+		}
+
+		// Browse again this square, and force this value when present.
+		for row := (0 + rowOffset); row <= (2 + rowOffset); row++ {
+			for col := (0 + colOffset); col <= (2 + colOffset); col++ {
+				for _, option := range gridOptions[row][col] {
+					if (option == valueToFix) {
+						gridOptions[row][col] = []int{valueToFix}
+						continue
+					}
+				}
+			}
+		}
+
+		// fmt.Println(dict)
 	}
+
+	printGridOptions()
 }
 
 func main() {
@@ -235,5 +302,24 @@ func main() {
 	strToGrid("100030002903040600200000300000308700010207030006904000001000009004070501600080003")
 	printGrid(false)
 
-	solveByRowColSquare()
+	var remains int = solveByRowColSquare()
+	printGridOptions()
+	
+	// solveByExclusiveOption
+	for (remains > 0) {
+		solveByExclusiveOption()
+		fillSecuredOptions()
+		solveByRowColSquare()
+
+		if (countEmptyCells() == remains) {
+			break
+		}
+
+		remains = countEmptyCells()
+	}
+	printGrid(true)
+
+	if (remains != 0) {
+		log.Fatal(errors.New("Could not solve."))
+	}
 }
