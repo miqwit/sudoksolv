@@ -209,7 +209,7 @@ func listOptionsPerEmptyCell() {
 			if (len(options) == 1) {
 				fmt.Printf("r%d,c%d: \033[31m%v\033[0m\n", row+1, col+1, options)
 			} else {
-				fmt.Printf("r%d,c%d: %v\n", row+1, col+1, options)
+				// fmt.Printf("r%d,c%d: %v\n", row+1, col+1, options)
 			}
 		}
 	}
@@ -228,88 +228,87 @@ func fillSecuredOptions() {
 	}
 }
 
-// This algorithm will try to fill all empty cells by checking
-// rows, cols and squares.
-func solveByRowColSquare() int {
-	var remains int = countEmptyCells()
-	
-	for (remains > 0) {
-		listOptionsPerEmptyCell() // fills gridOptions
-		printGrid(true)
-		fillSecuredOptions()
+func reduceOptionsFromUniqueOccurenceGeneric(rowMin int, rowMax int, colMin int, colMax int, zoneType string) {
+	var dict = make(map[int]int)
 
-		if (countEmptyCells() == remains) {
-			break
+	for row := rowMin; row <= rowMax; row++ {
+		for col := colMin; col <= colMax; col++ {
+			for _, option := range gridOptions[row][col] {
+				dict[option] = dict[option]+1
+			}
 		}
-
-		remains = countEmptyCells()
 	}
-	printGrid(true)
 
-	return remains
+	// If an option has only one possibility in the zone, set it as the only option.
+	var valueToFix int
+	for option, amount := range dict {
+		if (amount == 1) {
+			fmt.Printf("In %s, value %d can only be in one place\n", zoneType, option)
+			valueToFix = option
+		}
+	}
+
+	// Browse again this zone, and force this value when present.
+	for row := rowMin; row <= rowMax; row++ {
+		for col := colMin; col <= colMax; col++ {
+			for _, option := range gridOptions[row][col] {
+				if (option == valueToFix) {
+					gridOptions[row][col] = []int{valueToFix}
+					continue
+				}
+			}
+		}
+	}
+
 }
 
-// solveByExclusiveOption will fill grid with options that can't be elsewhere
+// reduceOptionsFromUniqueOccurence will select options that can't be elsewhere
 // on the square, the row or the column. The given cell can have multiple options
 // but only one cell of the squar/row/column can ultimately host it; e.g. the other
 // cells does not have this possible option.
-func solveByExclusiveOption() {
+func reduceOptionsFromUniqueOccurence() {
 	// Browse all squares
 	for square := 1; square <= 9; square++ {
 		var rowOffset int = ((square - 1) / 3) * 3
 		var colOffset int = ((square - 1) % 3) * 3
-		var dict = make(map[int]int)
-
-		for row := (0 + rowOffset); row <= (2 + rowOffset); row++ {
-			for col := (0 + colOffset); col <= (2 + colOffset); col++ {
-				for _, option := range gridOptions[row][col] {
-					dict[option] = dict[option]+1
-				}
-			}
-		}
-
-		// If an option has only one possibility in the square, set it as the only option.
-		var valueToFix int
-		for option, amount := range dict {
-			if (amount == 1) {
-				fmt.Printf("In square %d, value %d can only be in one place\n", square, option)
-				valueToFix = option
-			}
-		}
-
-		// Browse again this square, and force this value when present.
-		for row := (0 + rowOffset); row <= (2 + rowOffset); row++ {
-			for col := (0 + colOffset); col <= (2 + colOffset); col++ {
-				for _, option := range gridOptions[row][col] {
-					if (option == valueToFix) {
-						gridOptions[row][col] = []int{valueToFix}
-						continue
-					}
-				}
-			}
-		}
-
-		// fmt.Println(dict)
+		
+		reduceOptionsFromUniqueOccurenceGeneric(0 + rowOffset, 2 + rowOffset, 0 + colOffset, 2 + colOffset, fmt.Sprintf("square %d", square))
 	}
 
-	printGridOptions()
+	// Browse all rows
+	for row := 0; row < 9; row++ {
+		reduceOptionsFromUniqueOccurenceGeneric(row, row, 0, 8, fmt.Sprintf("row %d", row + 1))
+	}
+
+	// Browse all cols
+	for col := 0; col < 9; col++ {
+		reduceOptionsFromUniqueOccurenceGeneric(0, 8, col, col, fmt.Sprintf("col %d", col + 1))
+	}
+
+	// printGridOptions()
 }
 
 func main() {
 	// level 3
 	// strToGrid("120000050800400030000050948013200000400503007000001820731080000040006009060000084")
 	// level 3-4
-	strToGrid("100030002903040600200000300000308700010207030006904000001000009004070501600080003")
+	// strToGrid("100030002903040600200000300000308700010207030006904000001000009004070501600080003")
+	// strToGrid("090000000183090000065001700000170200010208090004035000006700340000010586000000020")
+	// level 4
+	// strToGrid("480006007300002490000004020000300281000000000731005000090700000043500009100600053")
+	strToGrid("006000300435009007701600000870002010000000000060900082000006105900100276007000800")
+	
 	printGrid(false)
 
-	var remains int = solveByRowColSquare()
-	printGridOptions()
-	
-	// solveByExclusiveOption
+	var remains int = countEmptyCells()
+	listOptionsPerEmptyCell() // fills gridOptions
+
 	for (remains > 0) {
-		solveByExclusiveOption()
+		reduceOptionsFromUniqueOccurence()
+		printGrid(true)
 		fillSecuredOptions()
-		solveByRowColSquare()
+		listOptionsPerEmptyCell()
+		printGrid(true)
 
 		if (countEmptyCells() == remains) {
 			break
@@ -317,7 +316,6 @@ func main() {
 
 		remains = countEmptyCells()
 	}
-	printGrid(true)
 
 	if (remains != 0) {
 		log.Fatal(errors.New("Could not solve."))
